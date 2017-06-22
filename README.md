@@ -1,1 +1,1 @@
-This repository will contain data from Mote Marine Lab and any analysis performed on this data.
+This repository contains data from Mote Marine Lab and the analysis of this data.
