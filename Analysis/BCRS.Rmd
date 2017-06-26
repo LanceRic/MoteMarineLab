@@ -1,0 +1,195 @@
+---
+title: "Mote BCRS Data"
+author: "Lance Price"
+date: "June 22, 2017"
+output: pdf_document
+---
+
+# Import data
+
+```{r}
+library(openxlsx)
+
+# Directory Path
+mote_dir <- "C:/Users/lance/Desktop/GIS/Mote_Marine_Lab/"
+
+# File Path
+bcrs_file <- paste(mote_dir, "/Data/BCRS_2012to2017.xlsx", sep = "")
+
+# Import BCRS data
+bcrs_2012_2015 <- read.xlsx(bcrs_file, sheet = 1, rows = seq(1,33596))
+bcrs_2015_2017 <- read.xlsx(bcrs_file, sheet = 2, na.strings = "NULL", cols = c(seq(1,20),seq(22,31)))
+
+# Date times were changed to numeric values on import
+# Convert them back to date times
+bcrs_2012_2015$date <- convertToDateTime(bcrs_2012_2015$date, origin = '1900-01-01')
+bcrs_2015_2017$created_at <- convertToDateTime(bcrs_2015_2017$created_at, origin = '1900-01-01')
+bcrs_2015_2017$updated_at <- convertToDateTime(bcrs_2015_2017$updated_at, origin = '1900-01-01')
+```
+
+
+# Clean data
+
+```{r}
+library(dplyr)
+
+# In 2012-2015 data, flags that had no value were incorrectly labeled with the county name
+# I correct this
+mislabeled <- which(is.na(bcrs_2012_2015$county))
+mislabeled_flags <- bcrs_2012_2015$flag[mislabeled]
+bcrs_2012_2015$flag[mislabeled] <- NA
+bcrs_2012_2015$county[mislabeled] <- mislabeled_flags
+
+# In 2015-2017 data, surface and air temperatures have 0 values for missing data.
+# Change them to NA
+bcrs_2015_2017$water_surface_tempature[which(bcrs_2015_2017$water_surface_tempature == 0)] <- NA
+bcrs_2015_2017$air_tempature[which(bcrs_2015_2017$air_tempature == 0)] <- NA
+
+# make data frame of beach info
+beaches <- bcrs_2015_2017[1:33595,c(4,7,8)]
+beaches <- unique(beaches)
+
+bcrs_2015_2017 <- bcrs_2015_2017[, -c(7,8)]
+
+bcrs_2015_2017 <- inner_join(bcrs_2015_2017,beaches, by="beach_id")
+
+write.csv(bcrs_2015_2017, file = paste(mote_dir,"/Data/BCRS_2015to2017LatLong.csv", sep = ""))
+```
+
+# Put 2015-2017 data with temperature on a map
+
+```{r}
+library(maps)
+library(ggplot2)
+library(scales)
+
+#load us map data
+all_states <- map_data("state")
+florida <- all_states[which(all_states$region=="florida"),]
+
+tempNotNA <- which(is.na(bcrs_2015_2017$water_surface_tempature) == FALSE &
+                   is.na(bcrs_2015_2017$air_tempature) == FALSE)
+bcrs_2015_2017_temp <- bcrs_2015_2017[tempNotNA, ]
+
+ggplot(bcrs_2015_2017_temp, aes(longitude, latitude, color = bcrs_2015_2017_temp$water_surface_tempature)) +
+  geom_polygon( data=all_states, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+  #geom_point(alpha = 0.5) + scale_colour_gradientn(colours=rainbow(4)) +
+  geom_point(alpha = 0.5, na.rm = TRUE) + #scale_colour_gradient(low = "blue", high = "red") +
+  scale_colour_gradient2(low = "blue", mid = "yellow", high = "red", midpoint = 85, space = "Lab",
+  na.value = "grey50", guide = "colourbar") +
+  coord_cartesian(xlim=c(-90,-80),ylim=c(25,32)) +
+  ggtitle(paste("Figure 1\n", "Water Surface Temperature for Beaches")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  guides(colour = guide_colourbar(title="Water Surface Temperature"))
+```
+
+```{r}
+hist(bcrs_2015_2017_temp$water_surface_tempature)
+plot(bcrs_2015_2017_temp$water_surface_tempature,bcrs_2015_2017_temp$air_tempature)
+```
+
+There is a cluster of water temperatures that look like they were recorded by Celsius instead of Fahrenheit.  We convert them to Fahrenheit.
+
+```{r}
+needConversion <- which(bcrs_2015_2017_temp$water_surface_tempature < 37)
+bcrs_2015_2017_temp$water_surface_tempature[needConversion] <-
+  bcrs_2015_2017_temp$water_surface_tempature[needConversion] * 1.8 + 32
+
+plot(bcrs_2015_2017_temp$water_surface_tempature,bcrs_2015_2017_temp$air_tempature)
+```
+
+Now there is one major cluster of air and water temperatures with three outliers (two for water temp and one for air temp).
+
+```{r}
+hist(bcrs_2015_2017_temp$created_at, breaks = "days", freq = TRUE)
+```
+
+
+```{r}
+beach1 <- bcrs_2015_2017_temp[which(bcrs_2015_2017_temp$beach_id == 1),]
+hist(beach1$created_at, breaks = "days", freq = TRUE)
+```
+
+```{r}
+beach2 <- bcrs_2015_2017_temp[which(bcrs_2015_2017_temp$beach_id == 2),]
+hist(beach2$created_at, breaks = "days", freq = TRUE)
+```
+
+
+```{r}
+ggplot(bcrs_2015_2017_temp, aes(longitude, latitude, color = bcrs_2015_2017_temp$water_surface_tempature)) +
+  geom_polygon( data=all_states, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+  #geom_point(alpha = 0.5) + scale_colour_gradientn(colours=rainbow(4)) +
+  geom_point(alpha = 0.5, na.rm = TRUE) + #scale_colour_gradient(low = "blue", high = "red") +
+  scale_colour_gradient2(low = "blue", mid = "yellow", high = "red", midpoint = 85, space = "Lab",
+  na.value = "grey50", guide = "colourbar") +
+  coord_cartesian(xlim=c(-83,-81.25),ylim=c(26,28.5)) +
+  ggtitle(paste("Figure 1\n", "Water Surface Temperature for Beaches")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  guides(colour = guide_colourbar(title="Water Surface Temperature"))
+
+
+```
+
+# Create Bounding Polygon around points around gulf coast.
+
+```{r}
+library(sp)
+
+dataPoly = data.frame(matrix(c(-82.9,28.1,
+                  -82.8,28.1,
+                  -82.15,26.6,
+                  -81.78,26.5,
+                  -81.8,26.25,
+                  -82.2,26.3,
+                  -82.75,27.4,
+                  -82.9,28.1), 
+             ncol = 2, byrow = TRUE))
+
+
+P1 = Polygon(dataPoly)
+Ps1 = SpatialPolygons(list(Polygons(list(P1), ID = "a")), proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+plot(Ps1, axes = TRUE)
+```
+
+```{r}
+dataPoly = data.frame(matrix(c(1,-82.9,28.1,
+                  1,-82.8,28.1,
+                  1,-82.15,26.6,
+                  1,-81.78,26.5,
+                  1,-81.8,26.25,
+                  1,-82.2,26.3,
+                  1,-82.75,27.4,
+                  1,-82.9,28.1), 
+             ncol = 3, byrow = TRUE))
+
+colnames(dataPoly) <- c("group","long", "lat")
+
+ggplot(bcrs_2015_2017_temp, aes(longitude, latitude, color = bcrs_2015_2017_temp$water_surface_tempature)) +
+  geom_polygon( data=all_states, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+  #geom_point(alpha = 0.5) + scale_colour_gradientn(colours=rainbow(4)) +
+  geom_point(alpha = 0.5, na.rm = TRUE) + #scale_colour_gradient(low = "blue", high = "red") +
+  scale_colour_gradient2(low = "blue", mid = "yellow", high = "red", midpoint = 85, space = "Lab",
+  na.value = "grey50", guide = "colourbar") +
+  coord_cartesian(xlim=c(-83,-81.25),ylim=c(26,28.5)) +
+  ggtitle(paste("Figure 1\n", "Water Surface Temperature for Beaches")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  guides(colour = guide_colourbar(title="Water Surface Temperature")) +
+  geom_polygon(data=dataPoly, aes(x=long, y=lat, group = group),colour="black", fill="grey10", alpha=.5 )
+
+```
+
+
+
+Decide how to bin time.
+
+
+For a few specific days, look at distribution of unique beaches binned by hour
+
+
+# Bind the data from the two Excel sheets together
+
+```{r}
+
+```
+
