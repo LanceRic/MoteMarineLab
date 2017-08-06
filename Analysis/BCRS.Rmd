@@ -183,13 +183,92 @@ ggplot(bcrs_2015_2017_temp, aes(longitude, latitude, color = bcrs_2015_2017_temp
 
 Decide how to bin time.
 
+```{r}
+bcrs_2015_2017_temp$created_at <- as.POSIXlt(bcrs_2015_2017_temp$created_at)
+bcrs_2015_2017_temp$time_bin <- case_when(
+  bcrs_2015_2017_temp$created_at$hour < 12 ~ paste(bcrs_2015_2017_temp$created_at$year + 1900,
+                                                   bcrs_2015_2017_temp$created_at$mon + 1,
+                                                   bcrs_2015_2017_temp$created_at$mday, 
+                                                   "AM", sep = "-"),
+  TRUE ~ paste(bcrs_2015_2017_temp$created_at$year + 1900,
+               bcrs_2015_2017_temp$created_at$mon + 1,
+               bcrs_2015_2017_temp$created_at$mday, 
+               "PM", sep = "-")
+  )
+
+bin1 <- bcrs_2015_2017_temp[which(bcrs_2015_2017_temp$time_bin == "2015-11-9-PM"), ]
+
+ggplot(bin1, aes(longitude, latitude)) + 
+  geom_raster(aes(fill = water_surface_tempature),
+              interpolate=FALSE) +
+  coord_cartesian(xlim=c(-83,-81.25),ylim=c(26,28.5))
+```
+
+
 
 For a few specific days, look at distribution of unique beaches binned by hour
 
 
-# Bind the data from the two Excel sheets together
+# Bind the data from the two Excel sheets together.  This will be useful for flags.
 
 ```{r}
 
 ```
+
+
+
+
+Create animation of point data.
+
+```{r}
+library(gganimate)
+
+bcrs_2015_2017_temp_2015_12 <- bcrs_2015_2017_temp[which(bcrs_2015_2017_temp$created_at$year+1900 == 2015 & 
+                                                         bcrs_2015_2017_temp$created_at$mon + 1 == 12),]
+
+p <- ggplot(bcrs_2015_2017_temp_2015_12, aes(longitude, latitude, color = water_surface_tempature, frame = time_bin)) +
+  geom_point(size = 7)
+
+gganimate(p, "C:/Users/lance/Desktop/GIS/Mote_Marine_Lab/output.gif")
+
+
+
+# try the example that was in GitHub repository
+library(gapminder)
+library(ggplot2)
+library(animation)
+
+theme_set(theme_bw())
+
+p <- ggplot(gapminder, aes(gdpPercap, lifeExp, size = pop, color = continent, frame = year)) +
+  geom_point() +
+  scale_x_log10()
+
+magickPath <- shortPathName("C:\\Program Files\\ImageMagick-7.0.6-Q16\\magick.exe")
+ani.options(convert=magickPath)
+ani.options(convert=shQuote('C:/Program Files/ImageMagick-7.0.6-Q16/magick.exe'))
+
+gganimate(p)
+```
+
+
+Strange error:
+
+magick.exe: unable to load module 'C:\Program Files\ImageMagick-7.0.6-Q16\modules\coders\IM_MOD_RL_PNG_.dll': The specified module could not be found.
+ @ error/module.c/OpenModule/1266.
+magick.exe: no decode delegate for this image format `PNG' @ error/constitute.c/ReadImage/509.
+
+
+
+
+Experiment with interpolation
+
+```{r}
+library(sp)
+dsp <- SpatialPoints(bin1[,30:29], proj4string=CRS("+proj=longlat +datum=NAD83"))
+dsp <- SpatialPointsDataFrame(dsp, d)
+
+
+```
+
 
