@@ -223,8 +223,7 @@ Create animation of point data.
 ```{r}
 library(gganimate)
 
-bcrs_2015_2017_temp_2015_12 <- bcrs_2015_2017_temp[which(bcrs_2015_2017_temp$created_at$year+1900 == 2015 & 
-                                                         bcrs_2015_2017_temp$created_at$mon + 1 == 12),]
+bcrs_2015_2017_temp_2016 <- bcrs_2015_2017_temp[which(bcrs_2015_2017_temp$created_at$year+1900 == 2016),]
 
 p <- ggplot(bcrs_2015_2017_temp_2015_12, aes(longitude, latitude, color = water_surface_tempature, frame = time_bin)) +
   geom_point(size = 7)
@@ -246,7 +245,6 @@ p <- ggplot(gapminder, aes(gdpPercap, lifeExp, size = pop, color = continent, fr
 
 magickPath <- shortPathName("C:\\Program Files\\ImageMagick-7.0.6-Q16\\magick.exe")
 ani.options(convert=magickPath)
-ani.options(convert=shQuote('C:/Program Files/ImageMagick-7.0.6-Q16/magick.exe'))
 
 gganimate(p)
 ```
@@ -271,4 +269,163 @@ dsp <- SpatialPointsDataFrame(dsp, d)
 
 ```
 
+Create Animations Part 2
+
+```{r}
+library(animation)
+library(colorRamps)
+#changing scale
+draw.curve<-function(bin){
+  a<-ggplot(bcrs_2015_2017_temp_2016[bcrs_2015_2017_temp_2016$time_bin==bin,],
+            aes(longitude,latitude, color = water_surface_tempature)) +
+     geom_polygon( data=florida, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+     geom_point(size=7) +
+     scale_colour_gradientn(colours = colorRamps::matlab.like(100)) +
+     ggtitle(paste("Water Surface Temperature on", bin)) +
+     theme(plot.title = element_text(hjust = 0.5))
+  
+  print(a)
+}
+
+#fixed scale
+min_water <- min(bcrs_2015_2017_temp_2016$water_surface_tempature)
+max_water <- max(bcrs_2015_2017_temp_2016$water_surface_tempature)
+
+draw.curve<-function(bin){
+  a<-ggplot(bcrs_2015_2017_temp_2016[bcrs_2015_2017_temp_2016$time_bin==bin,],
+            aes(longitude,latitude, color = water_surface_tempature)) +
+     geom_polygon( data=florida, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+     geom_point(size=7) +
+     scale_colour_gradientn(colours = colorRamps::matlab.like(100), limits=c(min_water, max_water)) +
+     ggtitle(paste("Water Surface Temperature on", bin)) +
+     theme(plot.title = element_text(hjust = 0.5))
+  
+  print(a)
+}
+
+trace.animate <- function() {
+  lapply(unique(bcrs_2015_2017_temp_2016$time_bin), function(i) {
+    draw.curve(i)
+  })
+}
+
+# http://www.wikihow.com/Install-FFmpeg-on-Windows was useful to install ffmpeg
+saveVideo(trace.animate(), movie.name = "2016.mp4",
+          img.name = "2016_pics",
+          ffmpeg = ani.options("C:/ffmpeg/bin/ffmpeg.exe"))
+```
+
+```{r}
+# flags
+draw.curve<-function(bin){
+  a<-ggplot(bcrs_2015_2017_temp_2016[bcrs_2015_2017_temp_2016$time_bin==bin,],
+            aes(longitude,latitude, color = flag)) +
+     geom_polygon( data=florida, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+     geom_point(size=7) +
+     scale_colour_manual(values = c("Green" = "green", "Yellow" = "yellow", "Red" = "red", 
+                                    "Double Red" = "darkred", "Purple" = "purple")) +
+     ggtitle(paste("Flags on", bin)) +
+     theme(plot.title = element_text(hjust = 0.5))
+  
+  print(a)
+}
+
+trace.animate <- function() {
+  lapply(unique(bcrs_2015_2017_temp_2016$time_bin), function(i) {
+    draw.curve(i)
+  })
+}
+
+saveVideo(trace.animate(), movie.name = "2016.mp4",
+          img.name = "2016_pics",
+          ffmpeg = ani.options("C:/ffmpeg/bin/ffmpeg.exe"))
+
+```
+
+
+
+Add new functionality to the ggplot
+
+
+```{r}
+library(grid)
+
+# add vx and vy columns that will be useful for drawing arrows based on speed and direction
+bcrs_2015_2017_temp$vx <- case_when(
+  bcrs_2015_2017_temp$wind_direction == "east" ~ bcrs_2015_2017_temp$wind_speed,
+  bcrs_2015_2017_temp$wind_direction == "west" ~ -bcrs_2015_2017_temp$wind_speed,
+  bcrs_2015_2017_temp$wind_direction == "north" ~ 0,
+  bcrs_2015_2017_temp$wind_direction == "south" ~ 0,
+  bcrs_2015_2017_temp$wind_direction == "northeast" ~ (bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5,
+  bcrs_2015_2017_temp$wind_direction == "northwest" ~ -(bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5,
+  bcrs_2015_2017_temp$wind_direction == "southeast" ~ (bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5,
+  bcrs_2015_2017_temp$wind_direction == "southwest" ~ -(bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5
+)
+
+bcrs_2015_2017_temp$vy <- case_when(
+  bcrs_2015_2017_temp$wind_direction == "east" ~ 0,
+  bcrs_2015_2017_temp$wind_direction == "west" ~ 0,
+  bcrs_2015_2017_temp$wind_direction == "north" ~ bcrs_2015_2017_temp$wind_speed,
+  bcrs_2015_2017_temp$wind_direction == "south" ~ -bcrs_2015_2017_temp$wind_speed,
+  bcrs_2015_2017_temp$wind_direction == "northeast" ~ (bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5,
+  bcrs_2015_2017_temp$wind_direction == "northwest" ~ (bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5,
+  bcrs_2015_2017_temp$wind_direction == "southeast" ~ -(bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5,
+  bcrs_2015_2017_temp$wind_direction == "southwest" ~ -(bcrs_2015_2017_temp$wind_speed ^ 2 / 2) ^ 0.5
+)
+
+bcrs_2015_2017_temp$vx <- bcrs_2015_2017_temp$vx * .2 
+bcrs_2015_2017_temp$vy <- bcrs_2015_2017_temp$vy * .2 
+
+bcrs_2015_2017_temp$resp_color <- case_when(
+  bcrs_2015_2017_temp$respiratory_irritation == "none" ~ "green",
+  bcrs_2015_2017_temp$respiratory_irritation == "slight" ~ "yellow",
+  bcrs_2015_2017_temp$respiratory_irritation == "moderate" ~ "orange",
+  bcrs_2015_2017_temp$respiratory_irritation == "intense" ~ "red"
+)
+
+bcrs_2015_2017_temp_2016 <- bcrs_2015_2017_temp[which(bcrs_2015_2017_temp$created_at$year+1900 == 2016),]
+
+# practice on one plot for first time bin
+bin = unique(bcrs_2015_2017_temp_2016$time_bin)[2]
+df <- bcrs_2015_2017_temp_2016[bcrs_2015_2017_temp_2016$time_bin==bin,]
+ggplot(df) +
+  geom_polygon( data=florida, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+  geom_point(size = 7, shape=21, aes(longitude,latitude, fill = water_surface_tempature)) +
+  scale_fill_gradientn(colours = colorRamps::matlab.like(100), limits=c(min_water, max_water)) +
+  geom_segment(mapping = aes(x=longitude, y=latitude, xend=longitude+vx, yend=latitude+vy, color=respiratory_irritation),
+               arrow = arrow(angle=15), size = 1) +
+  scale_colour_manual(values = c("none" = "green", "slight" = "yellow", "moderate" = "orange", "intense" = "red")) + 
+  ggtitle(paste("Respiratory Irritation", bin)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+```{r}
+draw.curve<-function(bin){
+  df <- bcrs_2015_2017_temp_2016[bcrs_2015_2017_temp_2016$time_bin==bin,]
+  a <- ggplot(df) +
+    geom_polygon( data=florida, aes(x=long, y=lat, group = group),colour="white", fill="grey10" ) +
+    geom_point(size = 7, shape=21, aes(longitude,latitude, fill = water_surface_tempature)) +
+    scale_fill_gradientn(colours = colorRamps::matlab.like(100), limits=c(min_water, max_water)) +
+    geom_segment(mapping = aes(x=longitude, y=latitude, xend=longitude+vx, yend=latitude+vy,
+                               color=respiratory_irritation),
+                 arrow = arrow(angle=15), size = 1) +
+    scale_colour_manual(values = c("none" = "green", "slight" = "yellow", "moderate" = "orange", "intense" = "red")) + 
+    ggtitle(paste("Respiratory Irritation", bin)) +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(a)
+}
+
+trace.animate <- function() {
+  lapply(unique(bcrs_2015_2017_temp_2016$time_bin), function(i) {
+    draw.curve(i)
+  })
+}
+
+saveVideo(trace.animate(), movie.name = "2016.mp4",
+          img.name = "2016_pics",
+          ffmpeg = ani.options("C:/ffmpeg/bin/ffmpeg.exe"))
+```
 
